@@ -1,30 +1,39 @@
 ﻿@page "/login"
-@using ReShareBlazorApp.Web.Models
 @rendermode InteractiveServer
-@inject NavigationManager nav
-<h3>LoginPage</h3>
-<form method="post" action="/auth/login">
-    <AntiforgeryToken />
-    <div class="login-card">
-        <div class="login-label">
-            <label>E-mail</label>
-            <input name="Email"
-                   type="email"
-                   placeholder="Wpisz e-mail!"
-                   required />
-        </div>
-        <div class="login-label">
-            <label>Hasło</label>
-            <input name="Password"
-                   type="password"
-                   placeholder="Wpisz hasło!"
-                   required />
-        </div>
+
+<PageTitle>Logowanie – ReShare</PageTitle>
+
+<div class="rs-auth">
+    <div class="rs-auth-card">
+        <h1>Zaloguj się</h1>
+        <p class="rs-auth-sub">Witaj z powrotem w ReShare.</p>
+
+        @* Błąd logowania – serwer przekierowuje na /login?error=1 *@
+        @if (Error == "1")
+        {
+            <div class="rs-alert">Nieprawidłowy e-mail lub hasło.</div>
+        }
+
+        @* Formularz wysyła dane do endpointu /auth/login (AuthEndpoints.cs) *@
+        <form method="post" action="/auth/login">
+            <AntiforgeryToken />
+            <div class="rs-field">
+                <label for="login-email">E-mail</label>
+                <input id="login-email" class="rs-input" name="Email" type="email" placeholder="jan@przyklad.pl" required />
+            </div>
+            <div class="rs-field">
+                <label for="login-password">Hasło</label>
+                <input id="login-password" class="rs-input" name="Password" type="password" placeholder="Wpisz hasło" required />
+            </div>
+            <button class="rs-auth-btn" type="submit">Zaloguj się</button>
+        </form>
+
+        <p class="rs-auth-foot">Nie masz konta? <a href="/register">Zarejestruj się</a></p>
     </div>
-    <button class="btn btn-primary" type="submit">Zaloguj się</button>
-</form>
-<button class="btn btn-primary" @onclick='() => nav.NavigateTo("/register")'>Nie masz konta? Zarejestruj się!</button>
+</div>
 
 @code {
-    public LoginModel LoginModel { get; set; } = new();
+    // Wartość z adresu, np. /login?error=1
+    [SupplyParameterFromQuery(Name = "error")]
+    public string? Error { get; set; }
 }

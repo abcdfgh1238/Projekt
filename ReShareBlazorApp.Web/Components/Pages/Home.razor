@@ -1,7 +1,277 @@
-﻿@page "/"
-@using Microsoft.AspNetCore.Authorization
+@page "/"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using ReShareBlazorApp.Web.Components.Elements
+@using ReShareBlazorApp.Web.Data
+@using ReShareBlazorApp.Web.Models
+@using ReShareBlazorApp.Web.Services
+@inject ListingStore Store
+@implements IDisposable
 
-<PageTitle>Home</PageTitle>
+<PageTitle>ReShare – kupuj, sprzedawaj, wynajmuj</PageTitle>
 
+<div class="rs-page">
 
+    @* ================= KARUZELA 3D – produkty (klik = strona ogłoszenia) ================= *@
+    <section class="rs-section rs-coverflow-section reveal">
+        <div class="rs-coverflow"
+             @onmouseenter="() => _paused = true"
+             @onmouseleave="() => _paused = false">
+            @for (var i = 0; i < _hero.Count; i++)
+            {
+                var index = i;                       // indeks produktu w karuzeli
+                var item = _hero[index];             // produkt, który pokazuje ta karta
+                var offset = GetOffset(index);       // gdzie karta jest względem środka (-3..3)
+                <a class="rs-cover" @key="index" href="/ogloszenie/@item.Id" style="@GetCoverStyle(offset)" draggable="false" aria-label="@item.Name">
+                    <img src="@item.BigImageUrl" alt="@item.Name" draggable="false" />
+                    <span class="rs-cover-caption">
+                        <span class="rs-cover-name">@item.Name</span>
+                        <span class="rs-cover-price">@item.PriceLabel</span>
+                    </span>
+                </a>
+            }
+        </div>
+    </section>
 
+    @* ================= 3 BOXY ================= *@
+    <section class="rs-section rs-actions">
+        <div class="rs-action  reveal" style="--delay:0s">
+            <div class="rs-action-img"><img src="https://picsum.photos/seed/rs-box-sell/700/440" alt="" loading="lazy" draggable="false" /></div>
+            <div class="rs-action-body">
+                <svg class="rs-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z" /><circle cx="7.5" cy="7.5" r="1.2" /></svg>
+                <h2>Sprzedaj niepotrzebne rzeczy</h2>
+                <p>Zrób miejsce w domu i zarób na tym, czego już nie używasz.</p>
+                <a class="rs-action-link" href="/dodaj?type=product">Wystaw ogłoszenie <span aria-hidden="true">→</span></a>
+            </div>
+        </div>
+        <div class="rs-action rs-action-featured reveal" style="--delay:.1s">
+            <div class="rs-action-img"><img src="https://picsum.photos/seed/rs-box-buy/700/440" alt="" loading="lazy" draggable="false" /></div>
+            <div class="rs-action-body">
+                <svg class="rs-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" /><path d="M3 6h18" /><path d="M16 10a4 4 0 0 1-8 0" /></svg>
+                <h2>Kup taniej</h2>
+                <p>Sprawdzone oferty od ludzi z Twojej okolicy. Okazje czekają.</p>
+                <a class="rs-action-link" href="/przedmioty">Przeglądaj oferty <span aria-hidden="true">→</span></a>
+            </div>
+        </div>
+        <div class="rs-action  reveal" style="--delay:.2s">
+            <div class="rs-action-img"><img src="https://picsum.photos/seed/rs-box-service/700/440" alt="" loading="lazy" draggable="false" /></div>
+            <div class="rs-action-body">
+                <svg class="rs-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z" /></svg>
+                <h2>Zaoferuj usługę</h2>
+                <p>Wynajmuj sprzęt, dawaj korepetycje, pomagaj sąsiadom i zarabiaj.</p>
+                <a class="rs-action-link" href="/dodaj?type=service">Dodaj usługę <span aria-hidden="true">→</span></a>
+            </div>
+        </div>
+    </section>
+
+    @* ================= KARUZELA Z PRZEŁĄCZNIKIEM ================= *@
+    <section class="rs-section reveal">
+        <div class="rs-section-head">
+            <h2 class="rs-h2">Polecane w ReShare</h2>
+
+            @* Przełącznik: produkty / usługi na wynajem *@
+            <div class="rs-tabs" role="tablist">
+                <button class="rs-tab @(!_showServices ? "active" : "")" role="tab" @onclick="() => SwitchMode(false)">Produkty</button>
+                <button class="rs-tab @(_showServices ? "active" : "")" role="tab" @onclick="() => SwitchMode(true)">Usługi na wynajem</button>
+            </div>
+        </div>
+
+        <div class="rs-slider">
+            <button class="rs-arrow" aria-label="Poprzednie" @onclick="Prev">
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+            </button>
+
+            <div class="rs-slider-viewport">
+                @* @key zmienia się przy każdym kliknięciu, dzięki temu animacja przesunięcia odpala się od nowa *@
+                <div class="rs-slider-track @_slideClass" @key="_slideKey">
+                    @foreach (var item in GetVisibleItems())
+                    {
+                        <ListingCard Item="item" />
+                    }
+                </div>
+            </div>
+
+            <button class="rs-arrow" aria-label="Następne" @onclick="Next">
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6" /></svg>
+            </button>
+        </div>
+    </section>
+
+    @* ================= JAK TO DZIAŁA ================= *@
+    <section class="rs-section rs-how reveal">
+        <div class="rs-how-photo">
+            <img src="https://picsum.photos/seed/rs-how/900/900" alt="" loading="lazy" draggable="false" />
+        </div>
+        <div class="rs-how-steps">
+            <h2 class="rs-h2">Jak to działa</h2>
+            <div class="rs-step">
+                <span class="rs-step-num">1</span>
+                <div><h3>Dodaj ogłoszenie</h3><p>Wrzuć zdjęcia, opisz przedmiot albo usługę i ustal cenę. To zajmuje chwilę.</p></div>
+            </div>
+            <div class="rs-step">
+                <span class="rs-step-num">2</span>
+                <div><h3>Znajdź to, czego szukasz</h3><p>Wyszukiwarka z filtrami pomoże trafić na ofertę z Twojej okolicy.</p></div>
+            </div>
+            <div class="rs-step">
+                <span class="rs-step-num">3</span>
+                <div><h3>Dogadaj się i odbierz</h3><p>Skontaktuj się ze sprzedającym, umów odbiór i ciesz się zakupem.</p></div>
+            </div>
+        </div>
+    </section>
+
+    @* ================= KATEGORIE ================= *@
+    <section class="rs-section">
+        <h2 class="rs-h2 reveal">Kupuj według kategorii</h2>
+
+        <div class="rs-categories">
+            @for (var i = 0; i < SampleData.Categories.Count; i++)
+            {
+                var cat = SampleData.Categories[i];
+                <a class="rs-category reveal"
+                   style="--delay:@((i % 6) * 70)ms"
+                   href="@($"/search?category={Uri.EscapeDataString(cat.Name)}")">
+                    <img class="rs-category-img" src="@SampleData.CategoryImage(i)" alt="" loading="lazy" draggable="false" />
+                    <span class="rs-category-shade"></span>
+                    <span class="rs-category-content">
+                        <svg class="rs-category-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">@((MarkupString)cat.Icon)</svg>
+                        <span class="rs-category-name">@cat.Name</span>
+                    </span>
+                </a>
+            }
+        </div>
+    </section>
+
+    @* ================= BANER ZACHĘCAJĄCY ================= *@
+    <section class="rs-section">
+        <div class="rs-cta reveal">
+            <img class="rs-cta-img" src="https://picsum.photos/seed/rs-cta/1400/520" alt="" loading="lazy" draggable="false" />
+            <div class="rs-cta-shade"></div>
+            <div class="rs-cta-content">
+                <h2>Masz coś, co może posłużyć innym?</h2>
+                <p>Wystaw ogłoszenie w kilka minut i znajdź nowego właściciela albo najemcę.</p>
+                <div class="rs-cta-buttons">
+                    <a class="rs-btn rs-btn-primary" href="/dodaj">Wystaw ogłoszenie</a>
+                    <a class="rs-btn rs-btn-ghost" href="/search">Przeglądaj oferty</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="rs-footer reveal">
+        <p>© @DateTime.Now.Year ReShare</p>
+    </footer>
+</div>
+
+@code {
+    // ---------- Karuzela 3D ----------
+    private List<ListingItem> _hero = new();                               // produkty w karuzeli 3D
+    private int _current;                                                  // indeks zdjęcia, które jest teraz na środku
+    private bool _paused;                                                  // true, gdy mysz jest nad karuzelą (stop obrotu)
+    private readonly CancellationTokenSource _cts = new();                 // pozwala zatrzymać timer po opuszczeniu strony
+
+    // ---------- Karuzela z przełącznikiem ----------
+    private const int VisibleCount = 4;                                    // ile kart renderujemy naraz (CSS ukrywa nadmiar na małych ekranach)
+    private bool _showServices;                                            // false = produkty, true = usługi
+    private int _sliderStart;                                              // indeks pierwszej widocznej karty
+    private int _slideKey;                                                 // zmiana klucza odtwarza animację
+    private string _slideClass = "";                                       // klasa animacji (kierunek przesunięcia)
+
+    private List<ListingItem> CurrentList => _showServices ? Store.Services : Store.Products;   // aktualnie wybrana lista
+
+    protected override void OnInitialized()
+    {
+        // Do karuzeli bierzemy pierwsze produkty ze zdjęciami (nowo dodane trafiają na początek)
+        _hero = Store.Products.Where(x => !string.IsNullOrWhiteSpace(x.ImageUrl)).Take(7).ToList();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender || _hero.Count < 2) return;                                          // timer uruchamiamy tylko raz
+        _ = AutoRotateAsync();                                             // start obrotu w tle (bez await)
+    }
+
+    private async Task AutoRotateAsync()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(2500)); // co 2,5 s następne zdjęcie
+        try
+        {
+            while (await timer.WaitForNextTickAsync(_cts.Token))           // czekamy na kolejny "tik"
+            {
+                if (_paused) continue;                                     // mysz nad karuzelą – pomijamy obrót
+                _current = (_current + 1) % _hero.Count;             // następne zdjęcie, po ostatnim wracamy do 0
+                await InvokeAsync(StateHasChanged);                        // odśwież widok
+            }
+        }
+        catch (OperationCanceledException) { }                             // normalne zakończenie przy opuszczeniu strony
+        catch (ObjectDisposedException) { }
+    }
+
+    // Zwraca pozycję zdjęcia względem środka: 0 = środek, -1 = lewo, 1 = prawo itd. (w kółko)
+    private int GetOffset(int index)
+    {
+        var count = _hero.Count;                                     // liczba zdjęć
+        var diff = (index - _current) % count;                             // różnica od zdjęcia środkowego
+        if (diff < 0) diff += count;                                       // zakres 0..count-1
+        if (diff > count / 2) diff -= count;                               // dalsze zdjęcia liczymy jako lewą stronę
+        return diff;
+    }
+
+    // Tworzy style CSS (położenie, obrót, rozmiar) dla zdjęcia o danym offsecie
+    private static string GetCoverStyle(int offset)
+    {
+        var abs = Math.Abs(offset);                                        // odległość od środka bez znaku
+
+        var (scale, brightness, opacity) = abs switch                      // im dalej od środka, tym mniejsze i ciemniejsze
+        {
+            0 => ("1", "1", "1"),
+            1 => (".86", ".55", ".95"),
+            2 => (".72", ".35", ".75"),
+            _ => (".6", ".3", "0")                                         // za daleko – całkiem przezroczyste
+        };
+
+        var pointer = abs > 2 ? "none" : "auto";                           // niewidocznych zdjęć nie da się kliknąć
+
+        return $"z-index:{10 - abs}; opacity:{opacity}; filter:brightness({brightness}); pointer-events:{pointer}; " +
+               $"transform: translateX(-50%) translateX({offset * 58}%) translateZ({-abs * 140}px) rotateY({-offset * 28}deg) scale({scale});";
+    }
+
+    // ---------- Metody dla karuzeli z produktami / usługami ----------
+    private List<ListingItem> GetVisibleItems()
+    {
+        var source = CurrentList;                                          // produkty albo usługi
+        var result = new List<ListingItem>();                              // lista kart do pokazania
+        for (var i = 0; i < VisibleCount; i++)
+        {
+            result.Add(source[(_sliderStart + i) % source.Count]);         // modulo = karuzela w kółko
+        }
+        return result;
+    }
+
+    private void Next()
+    {
+        _sliderStart = (_sliderStart + 1) % CurrentList.Count;             // przesuwamy o jedną kartę w prawo
+        _slideClass = "slide-next";                                        // animacja w lewo
+        _slideKey++;                                                       // nowy klucz = odtworzenie animacji
+    }
+
+    private void Prev()
+    {
+        _sliderStart = (_sliderStart - 1 + CurrentList.Count) % CurrentList.Count;   // przesuwamy o jedną kartę w lewo
+        _slideClass = "slide-prev";                                        // animacja w prawo
+        _slideKey++;
+    }
+
+    private void SwitchMode(bool showServices)
+    {
+        if (_showServices == showServices) return;                         // kliknięto już aktywną zakładkę
+        _showServices = showServices;                                      // zmiana: produkty <-> usługi
+        _sliderStart = 0;                                                  // zaczynamy od początku listy
+        _slideClass = "slide-fade";                                        // delikatne wyłonienie
+        _slideKey++;
+    }
+
+    public void Dispose()
+    {
+        _cts.Cancel();                                                     // zatrzymujemy timer
+        _cts.Dispose();                                                    // sprzątamy
+    }
+}

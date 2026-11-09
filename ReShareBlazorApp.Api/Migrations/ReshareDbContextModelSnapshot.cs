@@ -8,7 +8,7 @@ using ReShareBlazorApp.Api.Date;
 
 #nullable disable
 
-namespace ReShareBlazorApp.Migrations
+namespace ReShareBlazorApp.Api.Migrations
 {
     [DbContext(typeof(ReshareDbContext))]
     partial class ReshareDbContextModelSnapshot : ModelSnapshot

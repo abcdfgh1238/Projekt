@@ -1,0 +1,200 @@
+@page "/ogloszenie/{Id:int}"
+@using ReShareBlazorApp.Web.Components.Elements
+@using ReShareBlazorApp.Web.Models
+@using ReShareBlazorApp.Web.Services
+@inject ListingStore Store
+
+<PageTitle>@(_item?.Name ?? "Ogłoszenie") – ReShare</PageTitle>
+
+<div class="rs-page">
+    @if (_item is null)
+    {
+        <section class="rs-section rs-results-section">
+            <div class="rs-empty">
+                <div class="rs-empty-icon">🔍</div>
+                <h2>Nie znaleziono ogłoszenia</h2>
+                <p>Mogło zostać usunięte albo adres jest nieprawidłowy.</p>
+                <a class="rs-btn rs-btn-primary" href="/search">Przeglądaj ogłoszenia</a>
+            </div>
+        </section>
+    }
+    else
+    {
+        <section class="rs-section rs-detail-section">
+
+            @* Okruszki: gdzie jesteśmy *@
+            <nav class="rs-breadcrumb" aria-label="Ścieżka">
+                <a href="/">Strona główna</a>
+                <span>/</span>
+                <a href="@(_item.IsService ? "/uslugi" : "/przedmioty")">@(_item.IsService ? "Usługi" : "Przedmioty")</a>
+                <span>/</span>
+                <a href="@($"/search?category={Uri.EscapeDataString(_item.Category)}")">@_item.Category</a>
+            </nav>
+
+            @if (!string.IsNullOrEmpty(Added))
+            {
+                <div class="rs-alert rs-alert-ok">Dodano do koszyka. <a href="/koszyk">Przejdź do koszyka →</a></div>
+            }
+
+            <div class="rs-detail">
+
+                @* ================= GALERIA ================= *@
+                <div class="rs-gallery">
+                    <div class="rs-gallery-main">
+                        @if (_images.Count == 0)
+                        {
+                            <div class="rs-card-noimg" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="10" r="1.6" /><path d="m21 16-5-5-8 9" /></svg>
+                            </div>
+                        }
+                        else
+                        {
+                            <img id="rs-gallery-main" src="@_images[0]" alt="@_item.Name" />
+                        }
+                        @if (_item.IsService)
+                        {
+                            <span class="rs-card-badge">Usługa</span>
+                        }
+                    </div>
+
+                    @if (_images.Count > 1)
+                    {
+                        <div class="rs-gallery-thumbs">
+                            @for (var i = 0; i < _images.Count; i++)
+                            {
+                                <button type="button" class="rs-thumb @(i == 0 ? "active" : "")" data-gallery-thumb data-src="@_images[i]" aria-label="Zdjęcie @(i + 1)">
+                                    <img src="@_images[i]" alt="" loading="lazy" draggable="false" />
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
+
+                @* ================= INFORMACJE I KOSZYK ================= *@
+                <div class="rs-detail-info">
+                    <p class="rs-detail-cat">@_item.Category</p>
+                    <h1 class="rs-detail-title">@_item.Name</h1>
+                    <p class="rs-detail-price">@_item.PriceLabel</p>
+
+                    <ul class="rs-detail-facts">
+                        <li>
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0z" /><circle cx="12" cy="10" r="3" /></svg>
+                            @_item.City
+                        </li>
+                        @if (!_item.IsService && !string.IsNullOrWhiteSpace(_item.Condition))
+                        {
+                            <li>
+                                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7" /></svg>
+                                Stan: @_item.Condition
+                            </li>
+                        }
+                        <li>
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 11h18" /></svg>
+                            Dodano @_item.CreatedAt.ToString("dd.MM.yyyy")
+                        </li>
+                    </ul>
+
+                    @* Dodanie do koszyka – zwykły formularz POST (obsługuje go /cart/add) *@
+                    <form class="rs-buy" method="post" action="/cart/add">
+                        <AntiforgeryToken />
+                        <input type="hidden" name="id" value="@_item.Id" />
+                        <input type="hidden" name="returnUrl" value="@($"/ogloszenie/{_item.Id}?dodano=1")" />
+                        <label class="rs-buy-qty">
+                            <span>Ilość</span>
+                            <input class="rs-input" type="number" name="qty" value="1" min="1" max="99" />
+                        </label>
+                        <button class="rs-auth-btn" type="submit">Dodaj do koszyka</button>
+                    </form>
+
+                    <div class="rs-seller">
+                        <div class="rs-seller-avatar" aria-hidden="true">@SellerInitial()</div>
+                        <div>
+                            <p class="rs-seller-label">@(_item.IsService ? "Usługodawca" : "Sprzedający")</p>
+                            <p class="rs-seller-name">@MaskedEmail()</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            @* ================= OPIS I SZCZEGÓŁY ================= *@
+            <div class="rs-detail-lower">
+                <div class="rs-detail-desc">
+                    <h2 class="rs-h3">Opis</h2>
+                    @foreach (var paragraph in Paragraphs())
+                    {
+                        <p>@paragraph</p>
+                    }
+                </div>
+
+                <div class="rs-detail-specs">
+                    <h2 class="rs-h3">Szczegóły</h2>
+                    <dl>
+                        <div><dt>Kategoria</dt><dd>@_item.Category</dd></div>
+                        <div><dt>Rodzaj</dt><dd>@(_item.IsService ? "Usługa / wynajem" : "Przedmiot")</dd></div>
+                        @if (_item.IsService)
+                        {
+                            <div><dt>Rozliczenie</dt><dd>za @_item.Unit</dd></div>
+                        }
+                        else if (!string.IsNullOrWhiteSpace(_item.Condition))
+                        {
+                            <div><dt>Stan</dt><dd>@_item.Condition</dd></div>
+                        }
+                        <div><dt>Miejscowość</dt><dd>@_item.City</dd></div>
+                        <div><dt>Numer ogłoszenia</dt><dd>#@_item.Id</dd></div>
+                    </dl>
+                </div>
+            </div>
+
+            @* ================= PODOBNE ================= *@
+            @if (_related.Count > 0)
+            {
+                <h2 class="rs-h2 rs-related-title">Podobne ogłoszenia</h2>
+                <div class="rs-results rs-related">
+                    @foreach (var other in _related)
+                    {
+                        <ListingCard Item="other" />
+                    }
+                </div>
+            }
+        </section>
+    }
+</div>
+
+@code {
+    [Parameter] public int Id { get; set; }                                            // numer z adresu /ogloszenie/5
+
+    [SupplyParameterFromQuery(Name = "dodano")]
+    public string? Added { get; set; }                                                 // ?dodano=1 po dodaniu do koszyka
+
+    private ListingItem? _item;
+    private List<string> _images = new();
+    private List<ListingItem> _related = new();
+
+    protected override void OnParametersSet()
+    {
+        _item = Store.GetById(Id);
+        _images = _item?.AllImages.ToList() ?? new();
+        _related = _item is null ? new() : Store.Related(_item, 4);
+    }
+
+    // Opis dzielimy na akapity (puste linie)
+    private IEnumerable<string> Paragraphs() =>
+        string.IsNullOrWhiteSpace(_item?.Description)
+            ? new[] { "Sprzedający nie dodał jeszcze opisu." }
+            : _item!.Description.Split("\n\n", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    // Nie pokazujemy pełnego e-maila: j***@domena.pl
+    private string MaskedEmail()
+    {
+        if (!string.IsNullOrWhiteSpace(_item?.SellerName)) return _item!.SellerName;   // nazwa podana przy wystawianiu
+        var email = _item?.OwnerEmail ?? "";
+        var at = email.IndexOf('@');
+        return at > 0 ? $"{email[0]}***{email[at..]}" : "Użytkownik ReShare";
+    }
+
+    private string SellerInitial()
+    {
+        var name = !string.IsNullOrWhiteSpace(_item?.SellerName) ? _item!.SellerName : _item?.OwnerEmail ?? "";
+        return name.Length > 0 ? char.ToUpperInvariant(name[0]).ToString() : "R";
+    }
+}

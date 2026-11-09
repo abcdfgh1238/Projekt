@@ -1,43 +1,124 @@
-﻿@using System.Security.Claims
+@using System.Security.Claims
 @using Microsoft.AspNetCore.Components.Authorization
-<nav class="main-navbar">
-    <div class="main-navbar-container">
-        <a class="main-navbar-brand" href="/">Navbar</a>
+@using Microsoft.AspNetCore.WebUtilities
+@using ReShareBlazorApp.Web.Endpoints
+@using ReShareBlazorApp.Web.Services
+@inject NavigationManager Nav
+@inject CartStore Cart
 
-        <ul class="main-navbar-links">
-            <li class="main-navbar-item">
-                <a class="main-navbar-link active" href="/">Home</a>
-            </li>
-            <li class="main-navbar-item">
-                <a class="main-navbar-link active" href="#">Odkrywaj</a>
-            </li>
-            <li class="main-navbar-item">
-                <a class="main-navbar-link active" href="#">Wiadomości</a>
-            </li>
-            <li class="main-navbar-item">
-                <a class="main-navbar-link active" href="#">Profil</a>
-            </li>
-            <li class="main-navbar-item">
-                <a class="main-navbar-link active" href="/login">Zaloguj się</a>
-            </li>
-        </ul>
+<header class="rs-header">
+    <div class="rs-header-inner">
 
-        <form class="navbar-search" role="search">
-            <input class="navbar-search-input"
-                   type="search"
-                   placeholder="Search"
-                   aria-label="Search" />
+        @* Logo strony (klik = powrót na stronę główną) *@
+        <a class="rs-logo" href="/" aria-label="ReShare – strona główna">
+            <svg class="rs-logo-icon" viewBox="0 0 48 48" width="34" height="34" aria-hidden="true">
+                <defs>
+                    <linearGradient id="rsLogoGradient" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0" stop-color="#EDE7C7" />
+                        <stop offset="1" stop-color="#8B0000" />
+                    </linearGradient>
+                </defs>
+                <rect width="48" height="48" rx="14" fill="url(#rsLogoGradient)" />
+                <g transform="translate(10.8 10.8) scale(1.1)" fill="none" stroke="#200E01" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+                    <path d="M21 3v5h-5" />
+                    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+                    <path d="M8 16H3v5" />
+                </g>
+            </svg>
+            <span class="rs-logo-text">ReShare</span>
+        </a>
 
-            <button class="navbar-search-button" type="submit">
-                <svg width="18" height="18">
-                    <use href="#search" />
+        @* Wyszukiwarka na samej górze – po zatwierdzeniu przenosi na /search?q=fraza *@
+        <form class="rs-search" method="get" action="@_searchAction" role="search">
+            <button class="rs-search-btn" type="submit" aria-label="Szukaj">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="m20 20-3.5-3.5" />
                 </svg>
             </button>
+            <input class="rs-search-input" type="search" name="q" value="@_query" placeholder="Czego szukasz?" aria-label="Czego szukasz?" autocomplete="off" />
+        </form>
+
+        <div class="rs-header-right">
+            @* Koszyk z liczbą sztuk *@
+            <a class="rs-account rs-cart" href="/koszyk" aria-label="Koszyk (@_cartCount)" title="Koszyk">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+                    <path d="M3 6h18" />
+                    <path d="M16 10a4 4 0 0 1-8 0" />
+                </svg>
+                @if (_cartCount > 0)
+                {
+                    <span class="rs-cart-badge">@_cartCount</span>
+                }
+            </a>
             <AuthorizeView>
                 <Authorized Context="auth">
-                    <p>@auth.User.FindFirst(ClaimTypes.Email)?.Value</p>
+                    @* Zalogowany: e-mail + wylogowanie *@
+                    <span class="rs-user-email">@auth.User.FindFirst(ClaimTypes.Email)?.Value</span>
+                    <form method="post" action="/auth/logout">
+                        <AntiforgeryToken />
+                        <button class="rs-link-btn" type="submit">Wyloguj</button>
+                    </form>
                 </Authorized>
+                <NotAuthorized>
+                    @* Niezalogowany: ikonka konta prowadzi do logowania *@
+                    <a class="rs-account" href="/login" aria-label="Zaloguj się" title="Zaloguj się">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <circle cx="12" cy="8" r="4" />
+                            <path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8" />
+                        </svg>
+                    </a>
+                </NotAuthorized>
             </AuthorizeView>
-        </form>
+        </div>
     </div>
-</nav>
+    @* ================= PASEK NAWIGACJI: czego szukasz – przedmiotu czy usługi ================= *@
+    <nav class="rs-nav" aria-label="Wyszukiwanie ogłoszeń">
+        <div class="rs-nav-inner">
+            <div class="rs-nav-links">
+                <a class="@NavClass("/przedmioty")" href="/przedmioty" aria-current="@(IsActive("/przedmioty") ? "page" : null)">
+                    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z" /><circle cx="7.5" cy="7.5" r="1.2" /></svg>
+                    Przedmioty
+                </a>
+                <a class="@NavClass("/uslugi")" href="/uslugi" aria-current="@(IsActive("/uslugi") ? "page" : null)">
+                    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z" /></svg>
+                    Usługi
+                </a>
+            </div>
+            <a class="rs-nav-cta" href="/dodaj">+ Wystaw ogłoszenie</a>
+        </div>
+    </nav>
+</header>
+
+@code {
+    private string _query = "";                                            // tekst wpisany w wyszukiwarce (podpowiadany na stronie wyników)
+    private string _path = "/";                                            // aktualna ścieżka, np. "/uslugi"
+    private int _cartCount;                                                // ile sztuk jest w koszyku
+    private string _searchAction = "/search";                              // dokąd wysyła formularz wyszukiwarki
+
+    [CascadingParameter]
+    public HttpContext? HttpContext { get; set; }                          // potrzebny do odczytania ciasteczka koszyka
+
+    protected override void OnInitialized()
+    {
+        var cartId = CartEndpoints.ReadCartId(HttpContext);
+        _cartCount = cartId is null ? 0 : Cart.Count(cartId);
+
+        var uri = new Uri(Nav.Uri);                                        // aktualny adres strony
+        _path = uri.AbsolutePath.TrimEnd('/').ToLowerInvariant();
+        if (_path.Length == 0) _path = "/";
+
+        if (_path is "/search" or "/przedmioty" or "/uslugi")              // strony z wynikami
+        {
+            _searchAction = _path;                                         // szukamy dalej w tej samej części serwisu
+            var query = QueryHelpers.ParseQuery(uri.Query);                // rozbijamy ?q=...&category=...
+            _query = query.TryGetValue("q", out var q) ? q.ToString() : "";   // bierzemy wartość q, jeśli jest
+        }
+    }
+
+    private bool IsActive(string path) => _path == path;                   // czy ten link odpowiada otwartej stronie
+
+    private string NavClass(string path) => IsActive(path) ? "rs-nav-link active" : "rs-nav-link";
+}

@@ -361,3 +361,5 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+# Zdjęcia wgrywane przez użytkowników podczas działania aplikacji
+ReShareBlazorApp.Web/wwwroot/uploads/

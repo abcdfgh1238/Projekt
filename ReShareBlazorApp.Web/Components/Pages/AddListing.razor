@@ -1,0 +1,264 @@
+@page "/dodaj"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Hosting
+@using Microsoft.AspNetCore.Components.Authorization
+@using ReShareBlazorApp.Web.Data
+@using ReShareBlazorApp.Web.Models
+@using ReShareBlazorApp.Web.Services
+@inject ListingStore Store
+@inject NavigationManager Nav
+@inject IWebHostEnvironment Env
+
+<PageTitle>Wystaw ogłoszenie – ReShare</PageTitle>
+
+<div class="rs-page">
+    <section class="rs-section rs-form-section">
+        <h1 class="rs-h2">Wystaw ogłoszenie</h1>
+        <p class="rs-muted rs-form-lead">Wybierz, co chcesz dodać, i uzupełnij szczegóły.</p>
+
+        @* Wybór rodzaju ogłoszenia *@
+        <div class="rs-type-switch" role="tablist">
+            <button type="button" role="tab" class="rs-type @(!_isService ? "active" : "")" @onclick="() => SetType(false)">
+                <strong>Przedmiot</strong>
+                <span>Sprzedaj rzecz, której już nie używasz</span>
+            </button>
+            <button type="button" role="tab" class="rs-type @(_isService ? "active" : "")" @onclick="() => SetType(true)">
+                <strong>Usługa lub wynajem</strong>
+                <span>Wynajmuj sprzęt, dawaj korepetycje, pomagaj</span>
+            </button>
+        </div>
+
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <div class="rs-alert">@_error</div>
+        }
+
+        <EditForm Model="_model" OnValidSubmit="Submit" class="rs-form">
+            <DataAnnotationsValidator />
+
+            <div class="rs-field rs-span-2">
+                <label for="a-user">Nazwa użytkownika</label>
+                <InputText id="a-user" @bind-Value="_model.Username" class="rs-input" placeholder="np. jan_kowalski" autocomplete="off" />
+                <ValidationMessage For="@(() => _model.Username)" />
+                <span class="rs-hint">Pod tą nazwą pokażemy Twoje ogłoszenie. Konto nie jest wymagane.</span>
+            </div>
+
+            <div class="rs-field rs-span-2">
+                <label for="a-title">@(_isService ? "Nazwa usługi" : "Nazwa przedmiotu")</label>
+                <InputText id="a-title" @bind-Value="_model.Title" class="rs-input"
+                           placeholder="@(_isService ? "np. Wynajem wiertarki udarowej" : "np. Rower górski 26 cali")" />
+                <ValidationMessage For="@(() => _model.Title)" />
+            </div>
+
+            <div class="rs-field">
+                <label for="a-category">Kategoria</label>
+                <InputSelect id="a-category" @bind-Value="_model.Category" class="rs-input">
+                    <option value="">Wybierz kategorię…</option>
+                    @foreach (var cat in SampleData.Categories)
+                    {
+                        <option value="@cat.Name">@cat.Name</option>
+                    }
+                </InputSelect>
+                <ValidationMessage For="@(() => _model.Category)" />
+            </div>
+
+            <div class="rs-field">
+                <label for="a-city">Miejscowość</label>
+                <InputText id="a-city" @bind-Value="_model.City" class="rs-input" list="a-cities" placeholder="np. Warszawa" />
+                <datalist id="a-cities">
+                    @foreach (var city in SampleData.Cities)
+                    {
+                        <option value="@city"></option>
+                    }
+                </datalist>
+                <ValidationMessage For="@(() => _model.City)" />
+            </div>
+
+            <div class="rs-field">
+                <label for="a-price">Cena (zł)</label>
+                <InputNumber id="a-price" @bind-Value="_model.Price" class="rs-input" placeholder="0" />
+                <ValidationMessage For="@(() => _model.Price)" />
+            </div>
+
+            @if (_isService)
+            {
+                <div class="rs-field">
+                    <label for="a-unit">Rozliczenie</label>
+                    <InputSelect id="a-unit" @bind-Value="_model.Unit" class="rs-input">
+                        @foreach (var u in SampleData.Units)
+                        {
+                            <option value="@u">za @u</option>
+                        }
+                    </InputSelect>
+                </div>
+            }
+            else
+            {
+                <div class="rs-field">
+                    <label for="a-condition">Stan</label>
+                    <InputSelect id="a-condition" @bind-Value="_model.Condition" class="rs-input">
+                        @foreach (var c in SampleData.Conditions)
+                        {
+                            <option value="@c">@c</option>
+                        }
+                    </InputSelect>
+                </div>
+            }
+
+            <div class="rs-field rs-span-2">
+                <label for="a-desc">Opis</label>
+                <InputTextArea id="a-desc" @bind-Value="_model.Description" class="rs-input rs-textarea" rows="6"
+                               placeholder="Opisz dokładnie, co oferujesz: stan, wyposażenie, warunki odbioru lub wynajmu…" />
+                <ValidationMessage For="@(() => _model.Description)" />
+            </div>
+
+            <div class="rs-field rs-span-2">
+                <label>Zdjęcie (opcjonalnie)</label>
+                <label class="rs-upload">
+                    <InputFile OnChange="OnPhotoSelected" accept="image/png,image/jpeg,image/webp" />
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5" /><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" /></svg>
+                    <span>@(_photo is null ? "Kliknij, aby wybrać zdjęcie (JPG, PNG lub WEBP, do 5 MB)" : _photo.Name)</span>
+                </label>
+                @if (!string.IsNullOrEmpty(_photoError))
+                {
+                    <div class="validation-message">@_photoError</div>
+                }
+            </div>
+
+            <div class="rs-form-actions rs-span-2">
+                <button class="rs-auth-btn rs-form-submit" type="submit" disabled="@_busy">@(_busy ? "Zapisywanie…" : "Opublikuj ogłoszenie")</button>
+                <a class="rs-filters-clear" href="/">Anuluj</a>
+            </div>
+        </EditForm>
+    </section>
+</div>
+
+@code {
+    private const long MaxPhotoBytes = 5 * 1024 * 1024;                                   // limit rozmiaru zdjęcia: 5 MB
+    private static readonly string[] AllowedTypes = { "image/jpeg", "image/png", "image/webp" };
+
+    // Z adresu: /dodaj?type=service otwiera formularz usługi (domyślnie przedmiot)
+    [SupplyParameterFromQuery(Name = "type")]
+    public string? TypeParam { get; set; }
+
+    [CascadingParameter]
+    public Task<AuthenticationState>? AuthState { get; set; }                            // dane zalogowanego użytkownika
+
+    private readonly AddListingModel _model = new();
+    private bool _isService;                                                              // false = przedmiot, true = usługa
+    private IBrowserFile? _photo;                                                         // wybrane zdjęcie (zapisujemy dopiero po kliknięciu „Opublikuj”)
+    private string? _photoError;
+    private string? _error;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isService = string.Equals(TypeParam, "service", StringComparison.OrdinalIgnoreCase);
+
+        // Zalogowanym podpowiadamy nazwę z konta (można zmienić); gość wpisuje własną
+        if (AuthState is not null)
+        {
+            var user = (await AuthState).User;
+            if (user.Identity?.IsAuthenticated == true)
+            {
+                var email = user.FindFirst(ClaimTypes.Email)?.Value ?? "";
+                _model.Username = !string.IsNullOrWhiteSpace(user.Identity.Name)
+                    ? user.Identity.Name!
+                    : (email.Contains('@') ? email[..email.IndexOf('@')] : email);
+            }
+        }
+    }
+
+    private void SetType(bool isService) => _isService = isService;
+
+    private void OnPhotoSelected(InputFileChangeEventArgs e)
+    {
+        _photo = null;
+        _photoError = null;
+
+        var file = e.File;
+        if (!AllowedTypes.Contains(file.ContentType))
+        {
+            _photoError = "Dozwolone formaty zdjęć: JPG, PNG, WEBP.";
+            return;
+        }
+        if (file.Size > MaxPhotoBytes)
+        {
+            _photoError = "Zdjęcie jest za duże (maksymalnie 5 MB).";
+            return;
+        }
+        _photo = file;
+    }
+
+    private async Task Submit()
+    {
+        if (_busy) return;
+        _busy = true;
+        _error = null;
+
+        var saved = false;
+        try
+        {
+            var imageUrl = _photo is null ? "" : await SavePhotoAsync(_photo);
+
+            var email = "";
+            if (AuthState is not null)
+            {
+                var user = (await AuthState).User;
+                email = user.FindFirst(ClaimTypes.Email)?.Value ?? user.Identity?.Name ?? "";
+            }
+
+            Store.Add(new ListingItem
+            {
+                Name = _model.Title.Trim(),
+                SellerName = _model.Username.Trim(),
+                Description = _model.Description.Trim(),
+                Category = _model.Category,
+                City = _model.City.Trim(),
+                Price = _model.Price ?? 0,
+                IsService = _isService,
+                PriceNote = _isService ? $" / {_model.Unit}" : "",
+                Condition = _isService ? "" : _model.Condition,
+                ImageUrl = imageUrl,
+                OwnerEmail = email
+            });
+            saved = true;
+        }
+        catch (Exception)
+        {
+            _error = "Nie udało się zapisać ogłoszenia. Spróbuj ponownie.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+
+        if (saved)
+        {
+            Nav.NavigateTo(_isService ? "/uslugi?added=1" : "/przedmioty?added=1");       // lista z nowym ogłoszeniem na górze
+        }
+    }
+
+    // Zapisuje zdjęcie w wwwroot/uploads pod losową nazwą i zwraca jego adres
+    private async Task<string> SavePhotoAsync(IBrowserFile file)
+    {
+        var extension = file.ContentType switch
+        {
+            "image/png" => ".png",
+            "image/webp" => ".webp",
+            _ => ".jpg"
+        };
+
+        var folder = Path.Combine(Env.WebRootPath, "uploads");
+        Directory.CreateDirectory(folder);
+
+        var fileName = $"{Guid.NewGuid():N}{extension}";
+        await using var input = file.OpenReadStream(MaxPhotoBytes);
+        await using var output = System.IO.File.Create(Path.Combine(folder, fileName));
+        await input.CopyToAsync(output);
+
+        return $"/uploads/{fileName}";
+    }
+}

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using ReShareBlazorApp.Web.ApiServices;
 using ReShareBlazorApp.Web.Components;
 using ReShareBlazorApp.Web.Endpoints;
+using ReShareBlazorApp.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,6 +19,8 @@ builder.Services.AddScoped(sp =>
     return factory.CreateClient("API");
 });
 builder.Services.AddScoped<AuthApiService>();
+builder.Services.AddSingleton<ListingStore>();   // ogłoszenia trzymane w pamięci (do czasu podpięcia bazy)
+builder.Services.AddSingleton<CartStore>();      // koszyki w pamięci (klucz = ciasteczko)
 builder.Services
     .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
@@ -46,12 +49,17 @@ if (!app.Environment.IsDevelopment())
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
 
+// Zdjęcia wgrywane przez użytkowników lądują w wwwroot/uploads i muszą być serwowane w trakcie działania aplikacji
+Directory.CreateDirectory(Path.Combine(app.Environment.WebRootPath, "uploads"));
+app.UseStaticFiles();
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
 
 app.MapStaticAssets();
 app.MapAuthEndpoints();
+app.MapCartEndpoints();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 

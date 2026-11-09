@@ -3,66 +3,75 @@
 @rendermode InteractiveServer
 @using ReShareBlazorApp.Web.ApiServices
 @using ReShareBlazorApp.Web.Models
-<EditForm Model="@registerModel" OnValidSubmit="Register" FormName="register">
-    <DataAnnotationsValidator />
-    <ValidationSummary/>
-    <div class="register-container">
-        <div class="register-card">
-            <p>@Message</p>
-            <h2>Utwórz konto</h2>
-            <p>Wypełnij formularz, aby się zarejestrowac.</p>
-            <div class="register-field">
+
+<PageTitle>Rejestracja – ReShare</PageTitle>
+
+<div class="rs-auth">
+    <div class="rs-auth-card">
+        <h1>Utwórz konto</h1>
+        <p class="rs-auth-sub">Wypełnij formularz, aby się zarejestrować.</p>
+
+        @if (!string.IsNullOrEmpty(ErrorMessage))
+        {
+            <div class="rs-alert">@ErrorMessage</div>
+        }
+
+        @if (!string.IsNullOrEmpty(Message))
+        {
+            <div class="rs-alert rs-alert-ok">@Message <a href="/login">Zaloguj się</a></div>
+        }
+
+        <EditForm Model="@registerModel" OnValidSubmit="Register" FormName="register">
+            <DataAnnotationsValidator />
+
+            <div class="rs-field">
                 <label>Nazwa użytkownika</label>
-                <InputText @bind-Value="registerModel.Username"
-                           class="register-input"
-                           placeholder="Wpisz nazwę użytkownika" />
+                <InputText @bind-Value="registerModel.Username" class="rs-input" placeholder="Wpisz nazwę użytkownika" />
                 <ValidationMessage For="@(() => registerModel.Username)" />
             </div>
-            <div class="register-field">
+            <div class="rs-field">
                 <label>E-mail</label>
-                <InputText @bind-Value="registerModel.Email"
-                           class="register-input"
-                           placeholder="Wpisz e-mail" />
+                <InputText @bind-Value="registerModel.Email" class="rs-input" placeholder="jan@przyklad.pl" />
                 <ValidationMessage For="@(() => registerModel.Email)" />
             </div>
-            <div class="register-field">
-
+            <div class="rs-field">
                 <label>Hasło</label>
-                <InputText @bind-Value="registerModel.Password"
-                           class="register-input"
-                           placeholder="Wpisz hasło" />
+                <InputText @bind-Value="registerModel.Password" type="password" class="rs-input" placeholder="Wpisz hasło" />
                 <ValidationMessage For="@(() => registerModel.Password)" />
             </div>
-            <div class="register-field">
-
-                <label>Potwierdź</label>
-                <InputText @bind-Value="registerModel.ConfirmPassword"
-                           class="register-input"
-                           placeholder="Potwierdź hasło." />
+            <div class="rs-field">
+                <label>Potwierdź hasło</label>
+                <InputText @bind-Value="registerModel.ConfirmPassword" type="password" class="rs-input" placeholder="Powtórz hasło" />
                 <ValidationMessage For="@(() => registerModel.ConfirmPassword)" />
             </div>
-            <div class="register-terms">
-                <InputCheckbox @bind-Value="registerModel.AcceptTerms"/>
-                <label>Akceptuje regulamin.</label>
-            </div>
+
+            <label class="rs-check">
+                <InputCheckbox @bind-Value="registerModel.AcceptTerms" />
+                <span>Akceptuję regulamin</span>
+            </label>
             <ValidationMessage For="@(() => registerModel.AcceptTerms)" />
-            <button type="submit" class="register-button">
-                Zarejestruj się
-            </button>
-        </div>
+
+            <button type="submit" class="rs-auth-btn">Zarejestruj się</button>
+        </EditForm>
+
+        <p class="rs-auth-foot">Masz już konto? <a href="/login">Zaloguj się</a></p>
     </div>
-</EditForm>
+</div>
 
 @code {
-    private RegisterModel registerModel = new RegisterModel();
-    public string Message { get; set; }
+    private RegisterModel registerModel = new RegisterModel();             // dane z formularza
+    public string Message { get; set; } = "";                              // komunikat po udanej rejestracji
+    public string ErrorMessage { get; set; } = "";                         // komunikat, gdy rejestracja się nie udała
+
     private async Task Register()
     {
-        var result = await authApi.RegisterAsync(registerModel);
-        if(result == null)
+        var result = await authApi.RegisterAsync(registerModel);           // wysyłamy dane do API
+        if (result == null)
         {
+            ErrorMessage = "Nie udało się utworzyć konta. Sprawdź dane i spróbuj ponownie.";   // API zwróciło błąd
             return;
         }
-        Message = result.Message;
+        ErrorMessage = "";                                                 // czyścimy stary błąd
+        Message = result.Message;                                          // komunikat z API
     }
 }

@@ -1,0 +1,224 @@
+@page "/search"
+@page "/przedmioty"
+@page "/uslugi"
+@using System.Globalization
+@using ReShareBlazorApp.Web.Components.Elements
+@using ReShareBlazorApp.Web.Data
+@using ReShareBlazorApp.Web.Models
+@using ReShareBlazorApp.Web.Services
+@inject ListingStore Store
+@inject NavigationManager Nav
+
+<PageTitle>@GetPageTitle() – ReShare</PageTitle>
+
+<div class="rs-page">
+    <section class="rs-section rs-results-section">
+
+        @if (!string.IsNullOrEmpty(Added))
+        {
+            <div class="rs-alert rs-alert-ok">Twoje ogłoszenie zostało dodane i jest już widoczne na liście.</div>
+        }
+
+        <h1 class="rs-h2 rs-results-title">@GetTitle()</h1>
+        <p class="rs-muted">Znaleziono ogłoszeń: @_results.Count</p>
+
+        @* Przełącznik: wszystko / przedmioty / usługi (zachowuje wpisaną frazę) *@
+        <div class="rs-tabs rs-search-tabs">
+            <a class="rs-tab @(_isService is null ? "active" : "")" href="@TabHref("/search")">Wszystko</a>
+            <a class="rs-tab @(_isService == false ? "active" : "")" href="@TabHref("/przedmioty")">Przedmioty</a>
+            <a class="rs-tab @(_isService == true ? "active" : "")" href="@TabHref("/uslugi")">Usługi</a>
+        </div>
+
+        <div class="rs-search-layout">
+
+            @* ================= FILTRY (zwykły formularz GET – wartości trafiają do adresu strony) ================= *@
+            <aside class="rs-filters-wrap">
+                <form class="rs-filters" method="get" action="@_basePath">
+                    <h2 class="rs-filters-title">Filtry</h2>
+
+                    <div class="rs-field">
+                        <label for="f-q">Fraza</label>
+                        <input id="f-q" class="rs-input" type="search" name="q" value="@Q" placeholder="np. rower, wiertarka" autocomplete="off" />
+                    </div>
+
+                    <div class="rs-field">
+                        <label for="f-category">Kategoria</label>
+                        <select id="f-category" class="rs-input" name="category" onchange="this.form.submit()">
+                            <option value="">Wszystkie kategorie</option>
+                            @foreach (var cat in SampleData.Categories)
+                            {
+                                <option value="@cat.Name" selected="@IsSelected(Category, cat.Name)">@cat.Name</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="rs-field">
+                        <label>Cena (zł)</label>
+                        <div class="rs-range">
+                            <input class="rs-input" type="number" name="min" min="0" step="any" placeholder="od" aria-label="Cena od" value="@(_min?.ToString(CultureInfo.InvariantCulture))" />
+                            <span aria-hidden="true">–</span>
+                            <input class="rs-input" type="number" name="max" min="0" step="any" placeholder="do" aria-label="Cena do" value="@(_max?.ToString(CultureInfo.InvariantCulture))" />
+                        </div>
+                    </div>
+
+                    <div class="rs-field">
+                        <label for="f-city">Miejscowość</label>
+                        <input id="f-city" class="rs-input" type="text" name="city" list="rs-cities" value="@City" placeholder="np. Kraków" autocomplete="off" />
+                        <datalist id="rs-cities">
+                            @foreach (var city in SampleData.Cities)
+                            {
+                                <option value="@city"></option>
+                            }
+                        </datalist>
+                    </div>
+
+                    @if (_isService == false)
+                    {
+                        <div class="rs-field">
+                            <label for="f-condition">Stan</label>
+                            <select id="f-condition" class="rs-input" name="condition" onchange="this.form.submit()">
+                                <option value="">Dowolny</option>
+                                @foreach (var c in SampleData.Conditions)
+                                {
+                                    <option value="@c" selected="@IsSelected(Condition, c)">@c</option>
+                                }
+                            </select>
+                        </div>
+                    }
+
+                    @if (_isService == true)
+                    {
+                        <div class="rs-field">
+                            <label for="f-unit">Rozliczenie</label>
+                            <select id="f-unit" class="rs-input" name="unit" onchange="this.form.submit()">
+                                <option value="">Dowolne</option>
+                                @foreach (var u in SampleData.Units)
+                                {
+                                    <option value="@u" selected="@IsSelected(Unit, u)">za @u</option>
+                                }
+                            </select>
+                        </div>
+                    }
+
+                    <div class="rs-field">
+                        <label for="f-sort">Sortuj</label>
+                        <select id="f-sort" class="rs-input" name="sort" onchange="this.form.submit()">
+                            <option value="" selected="@IsSelected(Sort, "")">Najnowsze</option>
+                            <option value="price-asc" selected="@IsSelected(Sort, "price-asc")">Cena: od najniższej</option>
+                            <option value="price-desc" selected="@IsSelected(Sort, "price-desc")">Cena: od najwyższej</option>
+                            <option value="name" selected="@IsSelected(Sort, "name")">Nazwa: A–Z</option>
+                        </select>
+                    </div>
+
+                    <div class="rs-filters-actions">
+                        <button class="rs-auth-btn" type="submit">Zastosuj filtry</button>
+                        <a class="rs-filters-clear" href="@_basePath">Wyczyść filtry</a>
+                    </div>
+                </form>
+            </aside>
+
+            @* ================= WYNIKI ================= *@
+            <div class="rs-results-wrap">
+                @if (_results.Count == 0)
+                {
+                    <div class="rs-empty">
+                        <div class="rs-empty-icon">🔍</div>
+                        <h2>Nic nie znaleziono</h2>
+                        <p>Spróbuj zmienić filtry albo wpisać inne słowo.</p>
+                        <a class="rs-btn rs-btn-primary" href="@_basePath">Wyczyść filtry</a>
+                    </div>
+                }
+                else
+                {
+                    <div class="rs-results">
+                        @for (var i = 0; i < _results.Count; i++)
+                        {
+                            <div class="reveal" style="--delay:@((i % 3) * 80)ms">
+                                <ListingCard Item="_results[i]" />
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </section>
+</div>
+
+@code {
+    // Wszystkie filtry przychodzą z adresu, np. /przedmioty?q=rower&category=Rowerowe&min=100&max=700&sort=price-asc
+    [SupplyParameterFromQuery(Name = "q")] public string? Q { get; set; }
+    [SupplyParameterFromQuery(Name = "category")] public string? Category { get; set; }
+    [SupplyParameterFromQuery(Name = "city")] public string? City { get; set; }
+    [SupplyParameterFromQuery(Name = "condition")] public string? Condition { get; set; }
+    [SupplyParameterFromQuery(Name = "unit")] public string? Unit { get; set; }
+    [SupplyParameterFromQuery(Name = "sort")] public string? Sort { get; set; }
+    [SupplyParameterFromQuery(Name = "min")] public string? MinRaw { get; set; }      // ceny czytamy jako tekst i parsujemy sami (kropka / przecinek)
+    [SupplyParameterFromQuery(Name = "max")] public string? MaxRaw { get; set; }
+    [SupplyParameterFromQuery(Name = "added")] public string? Added { get; set; }     // ?added=1 po dodaniu ogłoszenia
+
+    private string _basePath = "/search";                                  // adres tej strony (cel formularza filtrów)
+    private bool? _isService;                                              // null = wszystko, false = przedmioty, true = usługi
+    private decimal? _min;
+    private decimal? _max;
+    private List<ListingItem> _results = new();
+
+    protected override void OnParametersSet()
+    {
+        var path = new Uri(Nav.Uri).AbsolutePath.TrimEnd('/').ToLowerInvariant();   // /przedmioty, /uslugi albo /search
+        if (path == "/przedmioty") { _basePath = "/przedmioty"; _isService = false; }
+        else if (path == "/uslugi") { _basePath = "/uslugi"; _isService = true; }
+        else { _basePath = "/search"; _isService = null; }
+
+        _min = ParsePrice(MinRaw);
+        _max = ParsePrice(MaxRaw);
+
+        _results = Store.Search(new ListingFilter
+        {
+            IsService = _isService,
+            Query = Q,
+            Category = Category,
+            City = City,
+            Condition = _isService == false ? Condition : null,            // stan ma sens tylko dla przedmiotów
+            Unit = _isService == true ? Unit : null,                       // rozliczenie tylko dla usług
+            MinPrice = _min,
+            MaxPrice = _max,
+            Sort = Sort
+        });
+    }
+
+    // Zamienia "12.5" albo "12,5" na liczbę; puste / błędne = brak filtra
+    private static decimal? ParsePrice(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var text = raw.Trim().Replace(',', '.');
+        return decimal.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out var value) && value >= 0 ? value : null;
+    }
+
+    private static bool IsSelected(string? current, string option) =>
+        string.Equals(current?.Trim() ?? "", option, StringComparison.OrdinalIgnoreCase);
+
+    // Link do zakładki Wszystko / Przedmioty / Usługi z zachowaniem wpisanej frazy
+    private string TabHref(string path) =>
+        string.IsNullOrWhiteSpace(Q) ? path : $"{path}?q={Uri.EscapeDataString(Q)}";
+
+    private string GetPageTitle() => _isService switch
+    {
+        false => "Przedmioty",
+        true => "Usługi",
+        _ => "Wyniki wyszukiwania"
+    };
+
+    // Tytuł nad wynikami zależny od tego, czego szukano
+    private string GetTitle()
+    {
+        var what = _isService switch { false => "Przedmioty", true => "Usługi", _ => "Wszystkie ogłoszenia" };
+
+        if (!string.IsNullOrWhiteSpace(Category) && !string.IsNullOrWhiteSpace(Q))
+            return $"{what} – kategoria „{Category}”, wyniki dla „{Q}”";
+        if (!string.IsNullOrWhiteSpace(Category))
+            return $"{what} – kategoria: {Category}";
+        if (!string.IsNullOrWhiteSpace(Q))
+            return $"{what} – wyniki dla „{Q}”";
+        return what;
+    }
+}

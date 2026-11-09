@@ -1,0 +1,99 @@
+@page "/koszyk"
+@using ReShareBlazorApp.Web.Endpoints
+@using ReShareBlazorApp.Web.Models
+@using ReShareBlazorApp.Web.Services
+@inject CartStore Cart
+@inject ListingStore Store
+
+<PageTitle>Koszyk – ReShare</PageTitle>
+
+<div class="rs-page">
+    <section class="rs-section rs-form-section rs-cart-section">
+        <h1 class="rs-h2">Koszyk</h1>
+
+        @if (_lines.Count == 0)
+        {
+            <div class="rs-empty">
+                <div class="rs-empty-icon">🛒</div>
+                <h2>Twój koszyk jest pusty</h2>
+                <p>Znajdź coś dla siebie i dodaj do koszyka.</p>
+                <a class="rs-btn rs-btn-primary" href="/search">Przeglądaj ogłoszenia</a>
+            </div>
+        }
+        else
+        {
+            <div class="rs-cart-layout">
+                <div class="rs-cart-list">
+                    @foreach (var (item, qty) in _lines)
+                    {
+                        <div class="rs-cart-item">
+                            <a class="rs-cart-img" href="@($"/ogloszenie/{item.Id}")">
+                                @if (string.IsNullOrWhiteSpace(item.ImageUrl))
+                                {
+                                    <span class="rs-card-noimg" aria-hidden="true"></span>
+                                }
+                                else
+                                {
+                                    <img src="@item.ImageUrl" alt="@item.Name" loading="lazy" />
+                                }
+                            </a>
+
+                            <div class="rs-cart-info">
+                                <a class="rs-cart-name" href="@($"/ogloszenie/{item.Id}")">@item.Name</a>
+                                <span class="rs-cart-meta">@item.City · @item.Category</span>
+                                <span class="rs-cart-unit">@item.PriceLabel</span>
+                            </div>
+
+                            @* Jeden formularz: przyciski − / + / Usuń wysyłają nową ilość do /cart/update *@
+                            <form class="rs-cart-actions" method="post" action="/cart/update">
+                                <AntiforgeryToken />
+                                <input type="hidden" name="id" value="@item.Id" />
+                                <div class="rs-stepper">
+                                    <button type="submit" name="qty" value="@(qty - 1)" aria-label="Mniej">−</button>
+                                    <span>@qty</span>
+                                    <button type="submit" name="qty" value="@(qty + 1)" aria-label="Więcej">+</button>
+                                </div>
+                                <span class="rs-cart-total">@FormatPrice(item.Price * qty)</span>
+                                <button class="rs-cart-remove" type="submit" name="qty" value="0">Usuń</button>
+                            </form>
+                        </div>
+                    }
+                </div>
+
+                <aside class="rs-cart-summary">
+                    <h2>Podsumowanie</h2>
+                    <div class="rs-cart-row"><span>Liczba sztuk</span><span>@_lines.Sum(x => x.Qty)</span></div>
+                    <div class="rs-cart-row rs-cart-sum"><span>Razem</span><span>@FormatPrice(_lines.Sum(x => x.Item.Price * x.Qty))</span></div>
+                    <button class="rs-auth-btn" type="button" disabled>Przejdź do kasy</button>
+                    <p class="rs-muted rs-cart-note">Płatności dodamy w kolejnym kroku.</p>
+
+                    <form method="post" action="/cart/clear">
+                        <AntiforgeryToken />
+                        <button class="rs-filters-clear rs-cart-clear" type="submit">Wyczyść koszyk</button>
+                    </form>
+                </aside>
+            </div>
+        }
+    </section>
+</div>
+
+@code {
+    [CascadingParameter]
+    public HttpContext? HttpContext { get; set; }                                      // z niego czytamy ciasteczko koszyka
+
+    private List<(ListingItem Item, int Qty)> _lines = new();
+
+    protected override void OnInitialized()
+    {
+        var cartId = CartEndpoints.ReadCartId(HttpContext);
+        if (cartId is null) return;
+
+        _lines = Cart.GetLines(cartId)
+            .Select(line => (Item: Store.GetById(line.ListingId), Qty: line.Quantity))
+            .Where(x => x.Item is not null)
+            .Select(x => (x.Item!, x.Qty))
+            .ToList();
+    }
+
+    private static string FormatPrice(decimal value) => $"{value:0.##} zł";
+}
